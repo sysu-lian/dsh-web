@@ -85,6 +85,59 @@ export function isUnpairedMobileError(error: unknown): boolean {
 /** The result of probing the paired-device-only mobile preference endpoint. */
 export type MobilePairState = 'checking' | 'paired' | 'unpaired' | 'unavailable'
 
+/**
+ * Refresh-restore: the surface is plain in-memory React state, so a page
+ * reload otherwise drops the user back at the workspaces homepage. We persist
+ * just enough of the navigation target (workspace id / session id) to
+ * localStorage and rebuild a minimal Route on mount — the views re-fetch
+ * their own data by id, so a partial object is sufficient. This mirrors the
+ * "resume exactly where you left off" behaviour of Claude Code UI / cui.
+ */
+const MOBILE_ROUTE_KEY = 'dsh.mobile.route.v1'
+
+type StoredRoute =
+  | { kind: 'sessions'; workspaceId: string }
+  | { kind: 'chat'; sessionId: string; workspaceId: string }
+
+/** Rebuild the last navigation target, or the homepage when none/invalid. */
+export function restoreMobileRoute(): Route {
+  try {
+    const raw = localStorage.getItem(MOBILE_ROUTE_KEY)
+    if (!raw) return { kind: 'workspaces' }
+    const stored = JSON.parse(raw) as StoredRoute
+    if (stored.kind === 'sessions') {
+      return { kind: 'sessions', workspace: { workspaceId: stored.workspaceId } as unknown as WorkspaceRow }
+    }
+    if (stored.kind === 'chat') {
+      return {
+        kind: 'chat',
+        session: { sessionId: stored.sessionId, title: '', updatedAt: 0, running: false, blank: false },
+        workspace: { workspaceId: stored.workspaceId } as unknown as WorkspaceRow,
+      }
+    }
+  } catch {
+    /* corrupt storage: fall through to homepage */
+  }
+  return { kind: 'workspaces' }
+}
+
+/** Persist the current navigation target; clear it when back at homepage. */
+export function persistMobileRoute(route: Route): void {
+  try {
+    if (route.kind === 'workspaces') {
+      localStorage.removeItem(MOBILE_ROUTE_KEY)
+      return
+    }
+    if (route.kind === 'sessions') {
+      localStorage.setItem(MOBILE_ROUTE_KEY, JSON.stringify({ kind: 'sessions', workspaceId: route.workspace.workspaceId }))
+      return
+    }
+    localStorage.setItem(MOBILE_ROUTE_KEY, JSON.stringify({ kind: 'chat', sessionId: route.session.sessionId, workspaceId: route.workspace.workspaceId }))
+  } catch {
+    /* storage unavailable (private mode / quota): non-persistent refresh is acceptable */
+  }
+}
+
 /** Classify an initial mobile preference failure without treating outage as authorization. */
 export function mobilePairStateForError(error: unknown): Extract<MobilePairState, 'unpaired' | 'unavailable'> {
   return isUnpairedMobileError(error) ? 'unpaired' : 'unavailable'
@@ -123,7 +176,7 @@ export function App({ initialPairError }: AppProps) {
 
 /** The existing remote mobile surface, mounted only after device pairing succeeds. */
 function PairedApp() {
-  const [route, setRoute] = useState<Route>({ kind: 'workspaces' })
+  const [route, setRoute] = useState<Route>(() => restoreMobileRoute())
   const [initialWorkspaceId, setInitialWorkspaceId] = useState<string | undefined>(
     () => mobileWorkspaceTarget(window.location.search),
   )
@@ -137,6 +190,12 @@ function PairedApp() {
     mux.start()
     return () => { mux.stop() }
   }, [])
+
+  // Persist the navigation target so a page reload resumes the same view
+  // instead of dropping back to the workspaces homepage.
+  useEffect(() => {
+    persistMobileRoute(route)
+  }, [route])
 
   // Keep the live-event client pointed at the session currently on screen so
   // its polling fallback can keep that chat fresh over SSE-impairing tunnels

@@ -651,7 +651,7 @@ const MessageRow = memo(function MessageRow({ message, showToolCalls, showSystem
       {message.kind === 'assistant'
         ? <MarkdownText text={message.text} pending={message.pending === true} />
         : <CollapsibleText text={message.text} />}
-      {message.failed === true && <span className="chat-msg-failtag">本次回复失败</span>}
+      {message.failed === true && <span className="chat-msg-failtag">请求失败，点此重试 ↻</span>}
       <span className="chat-msg-time">{formatTime(message.time)}</span>
     </div>
   )
