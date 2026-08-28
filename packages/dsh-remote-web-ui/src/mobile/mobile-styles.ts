@@ -292,13 +292,16 @@ body {
 /* ── buttons ─────────────────────────────────────────────────────────── */
 
 .mobile-button {
-  height: 38px;
+  min-height: 40px;
   padding: 0 18px;
   border: 1px solid var(--m-border);
   border-radius: 10px;
   background: var(--m-bg-raised);
   color: var(--m-text);
   font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
@@ -420,9 +423,11 @@ body {
 }
 
 .chat-msg-toggle {
-  display: block;
+  display: inline-flex;
+  align-items: center;
   margin-top: 8px;
-  padding: 4px 0;
+  padding: 6px 2px;
+  min-height: 34px;
   border: none;
   background: transparent;
   color: var(--m-accent);
@@ -482,6 +487,38 @@ body {
   background: transparent;
   padding: 0;
   color: inherit;
+}
+
+/* Code block copy button (wired in ChatView after the markdown is injected).
+   Sits in the top-right corner of the dark code surface; translucent so it
+   reads on the code background without hiding the first line. */
+.chat-code {
+  position: relative;
+}
+.chat-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c7d2e6;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.chat-code-copy:active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.chat-code-copy:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #101726, 0 0 0 4px var(--m-accent);
 }
 .chat-md-body ul, .chat-md-body ol { margin: 4px 0 8px; padding-left: 22px; }
 .chat-md-body li { margin: 2px 0; }

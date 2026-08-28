@@ -182,7 +182,12 @@ export function renderMarkdown(source: string): string {
       }
       i += 1 // closing fence
       const langAttr = lang === '' ? '' : ' class="language-' + escapeHtml(lang) + '"'
-      out.push('<pre' + langAttr + '><code>' + escapeHtml(code.join('\n')) + '</code></pre>')
+      // Wrap the block in .chat-code so ChatView can wire a copy button onto
+      // it after the HTML is injected (the renderer stays pure/dependency-free).
+      out.push(
+        '<div class="chat-code"><button type="button" class="chat-code-copy">复制</button>' +
+        '<pre' + langAttr + '><code>' + escapeHtml(code.join('\n')) + '</code></pre></div>'
+      )
       continue
     }
 

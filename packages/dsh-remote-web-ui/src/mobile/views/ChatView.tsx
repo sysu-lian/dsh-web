@@ -728,6 +728,33 @@ function ToolDisclosure({ tools }: { tools: ToolCallInfo[] }) {
  */
 export const STREAM_RENDER_INTERVAL_MS = 120
 
+/** Copy text to the clipboard, with an execCommand fallback for non-secure
+  contexts (e.g. plain-http local dev). Resolves true on success. */
+function copyText(text: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => fallbackCopy(text))
+  }
+  return Promise.resolve(fallbackCopy(text))
+}
+
+function fallbackCopy(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.top = '-9999px'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 /**
  * Assistant text rendered as GFM markdown (escape-first, protocol
  * allow-list — see markdown.ts). Long replies collapse by clamping the
@@ -738,6 +765,7 @@ export const STREAM_RENDER_INTERVAL_MS = 120
 function MarkdownText({ text, pending }: { text: string; pending: boolean }) {
   const [open, setOpen] = useState(false)
   const [html, setHtml] = useState<string>(() => renderMarkdown(text))
+  const bodyRef = useRef<HTMLDivElement | null>(null)
   /** Text of the last render actually applied to `html`. */
   const renderedTextRef = useRef(text)
   /** Newest streamed text, read by the trailing render at fire time. */
@@ -788,11 +816,31 @@ function MarkdownText({ text, pending }: { text: string; pending: boolean }) {
       if (timerRef.current !== undefined) clearTimeout(timerRef.current)
     }
   }, [])
+
+  // Wire copy buttons inside rendered markdown. The HTML is injected via
+  // dangerouslySetInnerHTML, so the buttons are plain DOM nodes needing a
+  // listener after each (re)render. The subtree is recreated only when `html`
+  // changes, so depending on `[html]` avoids duplicate listeners.
+  useEffect(() => {
+    const root = bodyRef.current
+    if (root === null) return
+    root.querySelectorAll<HTMLButtonElement>('.chat-code-copy').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const code = btn.parentElement?.querySelector('code')
+        const text = code ? code.innerText : ''
+        void copyText(text).then((ok) => {
+          const prev = btn.textContent
+          btn.textContent = ok ? '已复制' : '复制失败'
+          setTimeout(() => { btn.textContent = prev }, 1500)
+        })
+      })
+    })
+  }, [html])
   const long = !pending && text.length > LONG_TEXT_LIMIT
   const collapsed = long && !open
   return (
     <div className={'chat-msg-text chat-md' + (collapsed ? ' chat-md-collapsed' : '')}>
-      <div className="chat-md-body" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="chat-md-body" ref={bodyRef} dangerouslySetInnerHTML={{ __html: html }} />
       {long && (
         <button type="button" className="chat-msg-toggle" onClick={() => { setOpen(value => !value) }}>
           {open ? '收起' : '展开全文（' + text.length + ' 字）'}
