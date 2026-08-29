@@ -107,36 +107,68 @@ export const inject = ['slots', 'locale', 'connection', 'settingsScope', 'remote
  * @param ctx - client root context.
  */
 /**
- * On small screens, collapse the official app-shell sidebar to its rail by
- * clicking the native "Collapse sidebar" toggle once. The official web UI has
- * no width-based responsive breakpoints, so on a phone the sidebar otherwise
- * eats most of the width. The native toggle stays put for manual expand/collapse.
+ * On small screens, fully hide the official app-shell sidebar by zeroing its
+ * grid column, so the content area gets the entire width. The official web UI
+ * has no width-based responsive breakpoint, so on a phone the sidebar would
+ * otherwise keep a 56px rail.
+ *
+ * How it works: the app-shell renders a CSS grid
+ *   `grid-template-columns: <sidebar>px minmax(0,1fr) <details>px`
+ * and, when collapsed on a narrow viewport, tags its grid frame with the stable
+ * attribute `data-sidebar-collapsed` while keeping a 56px rail column. We scope
+ * an `!important` override to that attribute, which beats the app-shell's inline
+ * (non-important) grid style and drops the sidebar column to 0px. A deliberate
+ * tap on the native toggle expands it back to 280px (the attribute is then
+ * removed and the override no longer applies).
  */
 function autoCollapseSidebarOnMobile(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
   if (!window.matchMedia('(max-width: 820px)').matches) return
-  const selector = [
-    '[aria-label="Collapse sidebar"]',
-    '[aria-label="收起侧边栏"]',
-    '[aria-label="Expand sidebar"]',
-    '[aria-label="展开侧边栏"]',
-  ].join(', ')
+
+  const STYLE_ID = 'dsh-mobile-sidebar-hidden'
+  const injectStyle = (): void => {
+    if (document.getElementById(STYLE_ID)) return
+    if (!document.head) return
+    const style = document.createElement('style')
+    style.id = STYLE_ID
+    style.textContent = [
+      '@media (max-width: 820px) {',
+      '  /* Zero out the collapsed sidebar column so content fills the screen. */',
+      '  [data-sidebar-collapsed] {',
+      '    grid-template-columns: 0px minmax(0, 1fr) 0px !important;',
+      '  }',
+      '  /* Hide the rail\'s 1px border / clipped content. */',
+      '  [data-sidebar-collapsed] [class*="sidebarCol"] {',
+      '    display: none !important;',
+      '  }',
+      '}',
+    ].join('\n')
+    document.head.appendChild(style)
+  }
+
+  // If the app-shell happens to start expanded on a phone, click the native
+  // "Collapse" toggle once so the [data-sidebar-collapsed] rule above applies.
+  // We only ever click once; after that the user is free to expand manually.
+  let collapsedOnce = false
   let attempts = 0
-  const tryClick = (): void => {
-    const btn = document.querySelector<HTMLButtonElement>(selector)
+  const tryEnsure = (): void => {
+    injectStyle()
+    if (collapsedOnce) return
+    const btn = document.querySelector<HTMLButtonElement>(
+      '[aria-label="Collapse sidebar"], [aria-label="收起侧边栏"]'
+    )
     if (btn) {
-      const label = (btn.getAttribute('aria-label') || '').toLowerCase()
-      // Only collapse while expanded; if already collapsed the label flips to
-      // "Expand", so we leave it alone.
-      if (label.includes('collapse') || label.includes('收起')) btn.click()
+      btn.click()
+      collapsedOnce = true
       return
     }
-    if (attempts++ < 60) window.setTimeout(tryClick, 150)
+    if (attempts++ < 80) window.setTimeout(tryEnsure, 150)
   }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => window.setTimeout(tryClick, 400))
+    document.addEventListener('DOMContentLoaded', () => window.setTimeout(tryEnsure, 400))
   } else {
-    window.setTimeout(tryClick, 400)
+    window.setTimeout(tryEnsure, 400)
   }
 }
 
@@ -145,9 +177,9 @@ export function apply(ctx: ClientContext): void {
   // UTC day, package name only, silent failure.
   reportDailyHeartbeat([{ name: '@linxin666/dsh-remote-web-ui' }])
 
-  // On phones, collapse the official sidebar to its rail by default (the
-  // official UI has no responsive breakpoint for it). Runs on every page the
-  // plugin client loads, including the official "/".
+  // On phones, fully hide the official sidebar by default (zero-width column)
+  // so the content area fills the screen. Runs on every page the plugin client
+  // loads, including the official "/".
   autoCollapseSidebarOnMobile()
 
   ctx.effect(() => {
