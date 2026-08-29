@@ -887,7 +887,7 @@ function MarkdownText({ text, pending }: { text: string; pending: boolean }) {
     if (root === null) return
     root.querySelectorAll<HTMLButtonElement>('.chat-code-copy').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const code = btn.parentElement?.querySelector('code')
+        const code = btn.closest('.chat-code')?.querySelector('code')
         const text = code ? code.innerText : ''
         void copyText(text).then((ok) => {
           const prev = btn.textContent

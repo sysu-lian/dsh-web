@@ -22,6 +22,30 @@ export const mobileCss = `/* Mobile surface chrome: standalone stylesheet (no ma
   --m-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   --m-shadow-raise: 0 6px 20px rgba(16, 24, 40, 0.1);
   --m-backdrop: rgba(15, 23, 42, 0.4);
+
+  /* ── Official DeepSeek Harness design tokens (conversation-area parity) ──
+     Mirrors the desktop web UI's dsw token system so the chat surface renders
+     the exact same palette/typography as https://dsh.chuanxi.fun/. */
+  --dsw-font-family-code: "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, "PingFang SC", "Microsoft YaHei";
+  --dsw-font-base-16: 16px/24px var(--dsw-font-family);
+  --dsw-font-markdown-base: 16px/28px var(--dsw-font-family);
+  --dsw-font-s-strong-14: 500 14px/24px var(--dsw-font-family);
+  --dsw-font-xs-13: 13px/20px var(--dsw-font-family);
+  --dsw-font-markdown-code-block-small: 400 11px/16px var(--dsw-font-family-code);
+  --dsw-shadow-lv2: 0 4px 12px 0 rgba(0, 0, 0, .02), 0 2px 8px 0 rgba(0, 0, 0, .04);
+  --dsw-alias-label-primary: rgb(15, 17, 21);
+  --dsw-alias-label-secondary: rgb(207, 211, 214);
+  --dsw-alias-label-tertiary: rgb(173, 178, 184);
+  --dsw-alias-label-caption: rgb(173, 178, 184);
+  --dsw-alias-label-primary-dimmed: rgb(235, 238, 242);
+  --dsw-alias-bubble: rgb(237, 243, 254);
+  --dsw-alias-markdown-code-block: rgb(249, 250, 251);
+  --dsw-alias-interactive-bg-hover: rgba(38, 49, 72, .06);
+  --dsw-alias-interactive-bg-hover-solid: rgb(241, 243, 245);
+  --dsw-alias-border-l2: rgba(0, 0, 0, .1);
+  --dsw-alias-button-floating-fill: rgb(255, 255, 255);
+  --dsw-alias-button-floating-hover: rgb(241, 243, 245);
+  --dsw-alias-state-error-primary: rgb(236, 19, 19);
 }
 
 :root[data-theme='dark'] {
@@ -40,6 +64,21 @@ export const mobileCss = `/* Mobile surface chrome: standalone stylesheet (no ma
   --m-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   --m-shadow-raise: 0 6px 20px rgba(0, 0, 0, 0.4);
   --m-backdrop: rgba(0, 0, 0, 0.55);
+
+  /* Official dsw tokens — dark palette (see light :root for the rationale). */
+  --dsw-alias-label-primary: rgb(249, 250, 251);
+  --dsw-alias-label-secondary: rgb(97, 102, 107);
+  --dsw-alias-label-tertiary: rgb(129, 133, 140);
+  --dsw-alias-label-caption: rgb(129, 133, 140);
+  --dsw-alias-label-primary-dimmed: rgb(15, 17, 21);
+  --dsw-alias-bubble: rgb(44, 44, 46);
+  --dsw-alias-markdown-code-block: rgb(27, 27, 28);
+  --dsw-alias-interactive-bg-hover: rgba(255, 255, 255, .08);
+  --dsw-alias-interactive-bg-hover-solid: rgb(53, 54, 56);
+  --dsw-alias-border-l2: rgba(255, 255, 255, .12);
+  --dsw-alias-button-floating-fill: rgb(44, 44, 46);
+  --dsw-alias-button-floating-hover: rgb(53, 54, 56);
+  --dsw-alias-state-error-primary: rgb(242, 90, 90);
 }
 
 * {
@@ -357,33 +396,48 @@ body {
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
 }
 
+/* Message rows mirror the official desktop web UI: assistant messages are
+   full-width markdown with no bubble; user messages are right-aligned bubbles. */
 .chat-msg {
-  max-width: 88%;
-  padding: 10px 12px;
-  border-radius: var(--m-radius);
-  font-size: 14.5px;
-  line-height: 1.55;
+  max-width: 100%;
   overflow-wrap: break-word;
-  white-space: pre-wrap;
 }
 
 .chat-msg-user {
   align-self: flex-end;
-  background: var(--m-accent-soft);
-  color: var(--m-text);
-  border-radius: var(--m-radius);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 82%;
+}
+
+.chat-msg-user .chat-msg-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  background: var(--dsw-alias-bubble);
+  color: var(--dsw-alias-label-primary);
+  border-radius: 22px;
+  padding: 10px 16px;
+  font-size: 16px;
+  line-height: 24px;
+  white-space: pre-wrap;
 }
 
 .chat-msg-assistant {
-  align-self: flex-start;
+  align-self: stretch;
   background: transparent;
-  padding: 6px 4px;
+  padding: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  line-height: 28px;
 }
 
 .chat-msg-pending .chat-msg-text::after {
@@ -416,9 +470,9 @@ body {
   align-items: center;
   gap: 4px;
   margin-top: 4px;
-  color: var(--m-text-tertiary);
-  font-size: 10.5px;
-  line-height: 1.2;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .chat-msg-footer {
@@ -426,7 +480,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .chat-msg-footer .chat-msg-time {
@@ -451,44 +505,49 @@ body {
   min-height: 34px;
   border: none;
   background: transparent;
-  color: var(--m-accent);
+  color: var(--dsw-alias-label-tertiary);
   font-size: 13px;
   cursor: pointer;
 }
 
-/* ── assistant message action toolbar (copy / thumbs up / thumbs down) ── */
+/* ── assistant message action toolbar (copy / thumbs up / thumbs down) ──
+   Round 28px icon buttons, label-tertiary, hover = interactive-bg-hover —
+   matching the official MessageIconActions row. */
 
 .chat-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-top: 6px;
+  gap: 4px;
+  margin-top: 8px;
+  height: 28px;
 }
 
 .chat-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 28px;
   background: transparent;
-  color: var(--m-text-tertiary);
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
   transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-.chat-action-btn:active {
-  background: var(--m-accent-soft);
-  color: var(--m-accent);
+.chat-action-btn:active,
+.chat-action-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .chat-action-btn-active,
-.chat-action-btn-active:active {
-  color: var(--m-accent);
-  background: var(--m-accent-soft);
+.chat-action-btn-active:active,
+.chat-action-btn-active:hover {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* Assistant markdown content (GFM subset; renderer in markdown.ts). */
@@ -510,11 +569,20 @@ body {
   background: linear-gradient(transparent, var(--m-bg-raised));
   pointer-events: none;
 }
-.chat-md-body p { margin: 0 0 8px; }
-.chat-md-body p:last-child { margin-bottom: 0; }
+.chat-md-body {
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  line-height: 28px;
+  flex-direction: column;
+  display: flex;
+  gap: 16px;
+}
+.chat-md-body > *:first-child { margin-top: 0; }
+.chat-md-body > *:last-child { margin-bottom: 0; }
+.chat-md-body p { margin: 0; }
 .chat-md-body h1, .chat-md-body h2, .chat-md-body h3,
 .chat-md-body h4, .chat-md-body h5, .chat-md-body h6 {
-  margin: 12px 0 6px;
+  margin: 0;
   font-weight: 650;
   line-height: 1.3;
 }
@@ -523,17 +591,17 @@ body {
 .chat-md-body h3 { font-size: 1.15em; }
 .chat-md-body h4, .chat-md-body h5, .chat-md-body h6 { font-size: 1.05em; }
 .chat-md-body code {
-  font-family: var(--m-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-family: var(--dsw-font-family-code);
   font-size: 0.9em;
-  background: var(--m-accent-soft);
+  background: var(--dsw-alias-markdown-code-block);
   padding: 1px 5px;
   border-radius: 4px;
 }
 .chat-md-body pre {
-  margin: 8px 0;
+  margin: 0;
   padding: 10px;
-  background: #101726;
-  color: #dbe4f5;
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-primary);
   border-radius: 8px;
   overflow-x: auto;
   font-size: 12.5px;
@@ -543,63 +611,91 @@ body {
   background: transparent;
   padding: 0;
   color: inherit;
+  font-family: var(--dsw-font-family-code);
 }
 
-/* Code block copy button (wired in ChatView after the markdown is injected).
-   Sits in the top-right corner of the dark code surface; translucent so it
-   reads on the code background without hiding the first line. */
+/* Code block (wired in ChatView after the markdown is injected). Mirrors the
+   official CodeBlock: a banner with the language label + a copy button, over a
+   surface using the official markdown-code-block token. */
 .chat-code {
   position: relative;
+  margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--dsw-alias-markdown-code-block);
+  border: 1px solid var(--dsw-alias-border-l2);
+}
+.chat-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 4px 12px;
+}
+.chat-code-lang {
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-markdown-code-block-small);
+  text-transform: lowercase;
 }
 .chat-code-copy {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 1;
+  flex: none;
   padding: 3px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: none;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #c7d2e6;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 1.4;
   cursor: pointer;
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
   transition: background-color 0.12s ease, color 0.12s ease;
 }
-.chat-code-copy:active {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+.chat-code-copy:active,
+.chat-code-copy:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
 }
 .chat-code-copy:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px #101726, 0 0 0 4px var(--m-accent);
+  box-shadow: 0 0 0 2px var(--dsw-alias-markdown-code-block), 0 0 0 4px var(--m-accent);
 }
-.chat-md-body ul, .chat-md-body ol { margin: 4px 0 8px; padding-left: 22px; }
+.chat-code pre {
+  margin: 0;
+  padding: 0 12px 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.chat-code pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-family: var(--dsw-font-family-code);
+}
+.chat-md-body ul, .chat-md-body ol { margin: 0; padding-left: 22px; }
 .chat-md-body li { margin: 2px 0; }
 .chat-md-body blockquote {
-  margin: 8px 0;
+  margin: 0;
   padding: 4px 10px;
   border-left: 3px solid var(--m-accent);
-  background: var(--m-accent-soft);
+  background: var(--dsw-alias-interactive-bg-hover);
   border-radius: 0 6px 6px 0;
-  color: var(--m-text-secondary);
+  color: var(--dsw-alias-label-secondary);
 }
 .chat-md-body table {
-  margin: 8px 0;
+  margin: 0;
   border-collapse: collapse;
   display: block;
   overflow-x: auto;
   font-size: 13px;
 }
 .chat-md-body th, .chat-md-body td {
-  border: 1px solid var(--m-border);
+  border: 1px solid var(--dsw-alias-border-l2);
   padding: 4px 8px;
 }
-.chat-md-body th { background: var(--m-accent-soft); }
+.chat-md-body th { background: var(--dsw-alias-interactive-bg-hover-solid); }
 .chat-md-body a { color: var(--m-accent); }
-.chat-md-body hr { border: none; border-top: 1px solid var(--m-border); margin: 10px 0; }
+.chat-md-body hr { border: none; border-top: 1px solid var(--dsw-alias-border-l2); margin: 0; }
 .chat-md-body img { max-width: 100%; border-radius: 8px; }
 
 /* ── message disclosures (reasoning / tools) ─────────────────────────── */
@@ -679,7 +775,7 @@ body {
 
 .chat-reasoning .chat-disclosure-label {
   font-weight: 500;
-  color: var(--m-text-secondary);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .chat-reasoning .chat-disclosure-summary {
@@ -692,7 +788,9 @@ body {
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--m-text-tertiary);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 22px;
 }
 
 .chat-disclosure-summary {

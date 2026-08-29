@@ -59,7 +59,9 @@ describe('renderMarkdown', () => {
   it('renders fenced code without parsing its content', () => {
     const html = renderMarkdown('```ts\nconst a = **bold** <x>\n```')
     expect(html).toBe(
-      '<div class="chat-code"><button type="button" class="chat-code-copy">复制</button>' +
+      '<div class="chat-code">' +
+      '<div class="chat-code-head"><span class="chat-code-lang">ts</span>' +
+      '<button type="button" class="chat-code-copy">复制</button></div>' +
       '<pre class="language-ts"><code>const a = **bold** &lt;x&gt;</code></pre></div>'
     )
   })
