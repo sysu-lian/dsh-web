@@ -147,6 +147,126 @@ function firstMeaningfulLine(text: string): string {
   return newline === -1 ? trimmed : trimmed.slice(0, newline)
 }
 
+/* ── token / performance statistics (mirrors the official stats line) ─── */
+
+function formatDurationSeconds(ms: number): string {
+  const s = ms / 1000
+  if (s < 60) return `${Math.round(s * 10) / 10}s`
+  const whole = Math.round(s)
+  return `${Math.floor(whole / 60)}m${whole % 60}s`
+}
+
+function formatLatencySeconds(ms: number): string {
+  const s = Math.max(0, ms) / 1000
+  return s < 10 ? String(Math.round(s * 10) / 10) : String(Math.round(s))
+}
+
+function formatTokens(n: number): string {
+  const scaled = (v: number) => v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10)
+  if (n < 1000) return String(n)
+  if (n < 1000000) return `${scaled(n / 1000)}K`
+  return `${scaled(n / 1000000)}M`
+}
+
+function formatTokensPerSecond(tps: number): string {
+  const clamped = Math.max(0, tps)
+  return clamped >= 10 ? String(Math.round(clamped)) : String(Math.round(clamped * 10) / 10)
+}
+
+function billedInputTokens(usage: NonNullable<RenderMessage['usage']>): number {
+  return (usage.uncachedInputTokens ?? 0) + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+}
+
+function cacheHitPercent(usage: NonNullable<RenderMessage['usage']>): string | null {
+  const denominator = billedInputTokens(usage)
+  if (denominator === 0) return null
+  const missed = (usage.uncachedInputTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+  if (missed === 0) return '100'
+  const pct = Math.round((usage.cacheReadTokens ?? 0) / denominator * 100)
+  if (pct < 100) return String(pct)
+  return '99.9'
+}
+
+/** Aggregate turn-level statistics from the assistant messages in a group. */
+function buildStatsLine(messages: RenderMessage[]): string | null {
+  const assistantMessages = messages.filter(m => m.kind === 'assistant')
+  if (assistantMessages.length === 0) return null
+
+  const turn = assistantMessages[0]?.turn
+  const steps = new Set(assistantMessages.map(m => m.step).filter((s): s is number => s !== undefined)).size
+
+  let llmMs = 0
+  let toolMs = 0
+  let ttftMs = 0
+  let ttftSteps = 0
+  let decodeMs = 0
+  let decodeTokens = 0
+  let inputTokens = 0
+  let outputTokens = 0
+  let hasUsage = false
+
+  for (const message of assistantMessages) {
+    const timing = message.timing
+    if (timing !== undefined) {
+      if (timing.stepStartTime !== null) {
+        llmMs += Math.max(0, timing.completedTime - timing.stepStartTime)
+      }
+      if (timing.firstTokenTime !== null && timing.stepStartTime !== null) {
+        ttftMs += Math.max(0, timing.firstTokenTime - timing.stepStartTime)
+        ttftSteps += 1
+      }
+      if (timing.firstTokenTime !== null) {
+        decodeMs += Math.max(0, timing.completedTime - timing.firstTokenTime)
+      }
+    }
+    if (message.usage !== undefined) {
+      hasUsage = true
+      inputTokens += billedInputTokens(message.usage)
+      outputTokens += message.usage.outputTokens
+      decodeTokens += message.usage.outputTokens
+    }
+  }
+
+  const groups: string[] = []
+
+  if (turn !== undefined && steps > 0) {
+    groups.push(`${turn}轮 · ${steps}步`)
+  }
+
+  const durations: string[] = []
+  if (llmMs > 0) durations.push(`LLM ${formatDurationSeconds(llmMs)}`)
+  if (toolMs > 0) durations.push(`工具调用 ${formatDurationSeconds(toolMs)}`)
+  if (durations.length > 0) groups.push(durations.join(' · '))
+
+  const speeds: string[] = []
+  if (ttftSteps > 0) speeds.push(`首 token 平均${formatLatencySeconds(ttftMs / ttftSteps)}s`)
+  if (decodeMs > 0) speeds.push(`${formatTokensPerSecond(decodeTokens / (decodeMs / 1000))} tok/s`)
+  if (speeds.length > 0) groups.push(speeds.join(' · '))
+
+  if (hasUsage) {
+    const aggregateUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      uncachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    }
+    for (const message of assistantMessages) {
+      if (message.usage === undefined) continue
+      aggregateUsage.inputTokens += message.usage.inputTokens
+      aggregateUsage.outputTokens += message.usage.outputTokens
+      aggregateUsage.uncachedInputTokens += message.usage.uncachedInputTokens ?? 0
+      aggregateUsage.cacheReadTokens += message.usage.cacheReadTokens ?? 0
+      aggregateUsage.cacheWriteTokens += message.usage.cacheWriteTokens ?? 0
+    }
+    const pct = cacheHitPercent(aggregateUsage)
+    if (pct !== null) groups.push(`缓存命中 ${pct}%`)
+    groups.push(`输入 ${formatTokens(billedInputTokens(aggregateUsage))} tok · 输出 ${formatTokens(aggregateUsage.outputTokens)} tok`)
+  }
+
+  return groups.length > 0 ? groups.join(' | ') : null
+}
+
 /**
  * Render one session's chat.
  * @param props - the session, the mux client, and the back action.
@@ -524,15 +644,33 @@ export function ChatView({ session, mux, onBack }: ChatViewProps) {
             {loading ? '加载中…' : '加载更早的消息'}
           </button>
         )}
-        {messages.map((message, index) => (
-          <MessageRow
-            key={message.id}
-            message={message}
-            prevTime={index > 0 ? messages[index - 1].time : undefined}
-            showToolCalls={showToolCalls}
-            showSystemMessages={showSystemMessages}
-          />
-        ))}
+{groupMessages(messages).map((group, index, allGroups) => {
+          const prevGroup = index > 0 ? allGroups[index - 1] : undefined
+          const prevTime = prevGroup?.messages[prevGroup.messages.length - 1]?.time
+          if (group.kind === 'user') {
+            const userMessage = group.messages[0]
+            if (
+              userMessage.sourceKind !== undefined
+              && userMessage.sourceKind !== 'user'
+              && !showSystemMessages
+            ) {
+              return null
+            }
+            return (
+              <div key={userMessage.id} className="chat-msg chat-msg-user">
+                <UserMessageRow message={userMessage} />
+              </div>
+            )
+          }
+          return (
+            <AssistantTurnGroup
+              key={group.messages[0].id}
+              messages={group.messages}
+              prevTime={prevTime}
+              showToolCalls={showToolCalls}
+            />
+          )
+        })}
         {loading && messages.length === 0 && <p className="chat-typing">加载中…</p>}
         {!loading && messages.length === 0 && <p className="chat-typing">还没有消息，发一句话开始吧</p>}
         {running && (
@@ -671,93 +809,198 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-/**
- * One rendered message row (user bubble or assistant bubble with folds).
- * Memoized: live streaming updates exactly one message object per frame, so
- * unchanged rows skip re-rendering their markdown/sub-components.
- */
-const MessageRow = memo(function MessageRow({ message, prevTime, showToolCalls, showSystemMessages }: {
-  message: RenderMessage
-  prevTime?: number
-  showToolCalls: boolean
-  showSystemMessages: boolean
-}) {
-  // Injected user messages (sourceKind defined and not 'user') hide behind
-  // the system-message toggle.
-  if (message.kind === 'user'
-    && message.sourceKind !== undefined
-    && message.sourceKind !== 'user'
-    && !showSystemMessages) {
-    return null
-  }
-  const isAssistant = message.kind === 'assistant'
-  const hasReasoning = isAssistant && message.reasoning !== undefined && message.reasoning !== ''
-  const hasTools = showToolCalls && isAssistant && message.tools !== undefined && message.tools.length > 0
-  const hasText = message.text !== ''
-  const hasFailTag = message.failed === true
-  const duration = isAssistant && message.pending !== true && prevTime !== undefined && message.time > prevTime
-    ? Math.max(1, Math.round((message.time - prevTime) / 1000))
-    : undefined
+/* ── message grouping ─────────────────────────────────────────────────── */
 
-  if (!hasReasoning && !hasTools && !hasText && !hasFailTag) {
-    return null
+/** One contiguous group of messages with the same kind (user or assistant). */
+interface MessageGroup {
+  kind: 'user' | 'assistant'
+  messages: RenderMessage[]
+}
+
+/**
+ * Fold the flat message list into contiguous same-kind groups.
+ *
+ * Reasoning/text/tool events for a single assistant turn are sometimes split
+ * across multiple RenderMessage rows (different steps, partial streaming, etc.).
+ * The official mobile UI renders the whole turn as one assistant surface with
+ * an internal timeline, so adjacent assistant rows are grouped back into a
+ * single turn container.
+ */
+function isPlainAssistant(message: RenderMessage): boolean {
+  return message.pending !== true &&
+    (message.reasoning === undefined || message.reasoning === '') &&
+    (message.tools === undefined || message.tools.length === 0)
+}
+
+function groupMessages(messages: readonly RenderMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = []
+  for (const message of messages) {
+    const last = groups[groups.length - 1]
+    if (
+      last !== undefined &&
+      last.kind === message.kind &&
+      (message.kind !== 'user' || last.messages[0].sourceKind === message.sourceKind)
+    ) {
+      // Do not merge two finalized plain-text answers into one turn: each is an
+      // independent assistant reply. Fragments that carry reasoning or tools are
+      // still folded into the same turn container.
+      if (message.kind === 'assistant' && isPlainAssistant(message) && isPlainAssistant(last.messages[0])) {
+        groups.push({ kind: message.kind, messages: [message] })
+      } else {
+        last.messages.push(message)
+      }
+    } else {
+      groups.push({ kind: message.kind, messages: [message] })
+    }
   }
+  return groups
+}
+
+/** One user message row (right-aligned bubble). */
+const UserMessageRow = memo(function UserMessageRow({ message }: { message: RenderMessage }) {
   return (
-    <div className={`chat-msg chat-msg-${message.kind}${message.pending === true ? ' chat-msg-pending' : ''}${message.failed === true ? ' chat-msg-failed' : ''}`}>
-      {isAssistant ? (
-        <div className="Sxvs8a_root" data-streaming={message.pending === true || undefined}>
-          <div className="Sxvs8a_body">
-            {message.reasoning !== undefined && message.reasoning !== '' && (
-              <OfficialReasoningRow text={message.reasoning} pending={message.pending === true} />
-            )}
-            {showToolCalls && message.tools !== undefined && message.tools.length > 0 && message.tools.map((tool, index) => (
-              <OfficialToolRow key={`${tool.callId}-${index}`} tool={tool} failed={message.failed === true} />
-            ))}
-            {hasText && <MarkdownText text={message.text} pending={message.pending === true} />}
-            {hasFailTag && <span className="Sxvs8a_stopped">请求失败，点此重试 ↻</span>}
-          </div>
-          {!message.pending && hasText && (
-            <div className="p-xYUq_actions">
-              <CopyButton text={message.text} />
-              <span className="p-xYUq_timeEnd">
-                {formatTime(message.time)}
-                {duration !== undefined && ` · 用时 ${duration} 秒`}
-              </span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="gdEzaW_userRow" data-time-hover-root>
-          <div className="gdEzaW_userStack">
-            <div className="gdEzaW_bubble">{message.text}</div>
-          </div>
-          {!message.pending && hasText && (
-            <div className="p-xYUq_actions">
-              <CopyButton text={message.text} />
-              <span className="p-xYUq_timeEnd">{formatTime(message.time)}</span>
-            </div>
-          )}
+    <div className="gdEzaW_userRow" data-time-hover-root>
+      <div className="gdEzaW_userStack">
+        <div className="gdEzaW_bubble">{message.text}</div>
+      </div>
+      {!message.pending && message.text !== '' && (
+        <div className="p-xYUq_actions">
+          <CopyButton text={message.text} />
+          <span className="p-xYUq_timeEnd">{formatTime(message.time)}</span>
         </div>
       )}
     </div>
   )
 })
 
-/** Chevron indicator used by the official DisclosureRow rows. */
-function Chevron() {
+/**
+ * One assistant turn: a single Sxvs8a_root containing a timeline of
+ * reasoning/tool rows plus the final answer. Copy button and timestamp only
+ * appear on the final answer, matching the official mobile UI.
+ */
+function AssistantTurnGroup({ messages, prevTime, showToolCalls }: {
+  messages: RenderMessage[]
+  prevTime?: number
+  showToolCalls: boolean
+}) {
+  const lastMessage = messages[messages.length - 1]!
+  const pending = messages.some(m => m.pending === true)
+  const failed = messages.some(m => m.failed === true)
+  const answerText = messages
+    .map(m => m.text ?? '')
+    .filter(t => t !== '')
+    .join('\n\n')
+  const hasText = answerText !== ''
+  const [showStats, setShowStats] = useState(false)
+
+  const duration = !pending && prevTime !== undefined && lastMessage.time > prevTime
+    ? Math.max(1, Math.round((lastMessage.time - prevTime) / 1000))
+    : undefined
+
+  const timelineItems: ReactNode[] = []
+  messages.forEach((message, mIndex) => {
+    if (message.reasoning !== undefined && message.reasoning !== '') {
+      timelineItems.push(
+        <OfficialReasoningRow key={`${message.id}-reasoning-${mIndex}`} text={message.reasoning} pending={message.pending === true} />,
+      )
+    }
+    if (showToolCalls && message.tools !== undefined && message.tools.length > 0) {
+      for (let index = 0; index < message.tools.length; index++) {
+        const tool = message.tools[index]
+        timelineItems.push(
+          <OfficialToolRow
+            key={`${message.id}-tool-${tool.callId}-${mIndex}-${index}`}
+            tool={tool}
+            failed={message.failed === true}
+          />,
+        )
+      }
+    }
+  })
+
+  if (timelineItems.length === 0 && !hasText && !failed) {
+    return null
+  }
+
+  const showActions = !pending && hasText
+  const statsLine = buildStatsLine(messages)
+
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-      <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <div className="chat-msg chat-msg-assistant" data-streaming={pending || undefined}>
+      <div className="Sxvs8a_root" data-streaming={pending || undefined}>
+        <div className="Sxvs8a_body">
+          {timelineItems}
+          {hasText && <MarkdownText text={answerText} pending={pending} />}
+          {failed && !hasText && <span className="Sxvs8a_stopped">请求失败，点此重试 ↻</span>}
+        </div>
+        {showActions && (
+          <div className="chat-msg-actions">
+            <div className="p-xYUq_actions">
+              <CopyButton text={answerText} />
+              <span className="p-xYUq_timeEnd">
+                {formatTime(lastMessage.time)}
+                {duration !== undefined && ` · 用时 ${duration} 秒`}
+              </span>
+            </div>
+            {statsLine !== null && (
+              <button
+                type="button"
+                className={showStats ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
+                aria-label={showStats ? '收起用量说明' : '展开用量说明'}
+                aria-pressed={showStats}
+                onClick={() => { setShowStats(value => !value) }}
+              >
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                  <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M8 4.5v3.5l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+        {showStats && statsLine !== null && (
+          <div className="chat-stats-line">{statsLine}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+/** Chevron indicator used by the official DisclosureRow rows.
+ *  In the official mobile UI the chevron points down when collapsed and
+ *  up when the row is expanded. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      aria-hidden="true"
+      focusable="false"
+      style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }}
+    >
+      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
-/** Official Think icon (IconThinkOutline14, verbatim from ui-primitives). */
+/** Official Think icon (verbatim 14×14 from dsh-client-ui-conversation). */
 function ThinkIcon() {
   return (
-    <svg viewBox="0 0 14 14" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 14 14" width="14" height="14" fill="none" aria-hidden="true" focusable="false">
       <path d="M7.06431 5.93342C7.68763 5.93342 8.19307 6.43904 8.19322 7.06233C8.19322 7.68573 7.68772 8.19123 7.06431 8.19123C6.44099 8.19113 5.9354 7.68567 5.9354 7.06233C5.93555 6.43911 6.44108 5.93353 7.06431 5.93342Z" fill="currentColor" />
       <path fillRule="evenodd" clipRule="evenodd" d="M8.6815 0.963693C10.1169 0.447019 11.6266 0.374829 12.5633 1.31135C13.5 2.24805 13.4277 3.75776 12.911 5.19319C12.7126 5.74431 12.4386 6.31796 12.0965 6.89729C12.4969 7.54638 12.8141 8.19018 13.036 8.80647C13.5527 10.2419 13.6251 11.7516 12.6883 12.6883C11.7516 13.625 10.242 13.5527 8.8065 13.036C8.19022 12.8141 7.54641 12.4969 6.89732 12.0965C6.31797 12.4386 5.74435 12.7125 5.19322 12.911C3.75777 13.4276 2.2481 13.5 1.31138 12.5633C0.374859 11.6266 0.447049 10.1168 0.963724 8.68147C1.17185 8.10338 1.46321 7.50063 1.82896 6.8924C1.52182 6.35711 1.27235 5.82825 1.08872 5.31819C0.572068 3.88278 0.499714 2.37306 1.43638 1.43635C2.37308 0.499655 3.8828 0.572044 5.31822 1.08869C5.82828 1.27232 6.35715 1.5218 6.89243 1.82893C7.50066 1.46318 8.10341 1.17181 8.6815 0.963693ZM11.3573 8.01154C10.9083 8.62253 10.3901 9.22873 9.80943 9.8094C9.22877 10.3901 8.62255 10.9083 8.01158 11.3572C8.4257 11.5841 8.8287 11.7688 9.21275 11.9071C10.5456 12.3868 11.4246 12.2547 11.8397 11.8397C12.2548 11.4246 12.3869 10.5456 11.9071 9.21272C11.7688 8.82866 11.5841 8.42568 11.3573 8.01154ZM2.56529 8.02912C2.37344 8.39322 2.21495 8.74796 2.09263 9.08772C1.61291 10.4204 1.74512 11.2995 2.16001 11.7147C2.57505 12.1297 3.45415 12.2618 4.78697 11.7821C5.11057 11.6656 5.44786 11.5164 5.7938 11.3367C5.249 10.9223 4.70922 10.4533 4.19029 9.9344C3.57578 9.31987 3.03169 8.67633 2.56529 8.02912ZM6.90708 3.2469C6.24065 3.70479 5.5646 4.26321 4.91392 4.91389C4.26325 5.56456 3.70482 6.24063 3.24693 6.90705C3.72674 7.63325 4.32777 8.37459 5.03892 9.08576C5.64943 9.69627 6.28183 10.2265 6.90806 10.6678C7.59368 10.2025 8.2908 9.63076 8.96079 8.96076C9.6308 8.29075 10.2025 7.59366 10.6678 6.90803C10.2265 6.2818 9.69631 5.6494 9.08579 5.03889C8.37462 4.32773 7.63328 3.72672 6.90708 3.2469ZM11.7147 2.15998C11.2996 1.74509 10.4204 1.61288 9.08775 2.0926C8.74835 2.21479 8.39382 2.37271 8.03013 2.56428C8.67728 3.03065 9.31995 3.5758 9.93443 4.19026C10.4534 4.7092 10.9223 5.24896 11.3368 5.79377C11.5164 5.44785 11.6656 5.11052 11.7821 4.78694C12.2618 3.45416 12.1297 2.57502 11.7147 2.15998ZM4.91197 2.2176C3.57922 1.73788 2.70004 1.86995 2.28501 2.28498C1.87001 2.70003 1.73791 3.5792 2.21763 4.91194C2.31709 5.18822 2.44112 5.47427 2.58677 5.7674C3.01931 5.1887 3.51474 4.6158 4.06529 4.06526C4.61584 3.5147 5.18872 3.01928 5.76743 2.58674C5.47431 2.4411 5.18824 2.31706 4.91197 2.2176Z" fill="currentColor" />
+    </svg>
+  )
+}
+
+/** Bash / terminal icon (14×14 to match the official leading size). */
+function BashIcon() {
+  return (
+    <svg viewBox="0 0 14 14" width="14" height="14" fill="none" aria-hidden="true" focusable="false">
+      <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M4 6l2 2-2 2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -769,17 +1012,24 @@ function OfficialReasoningRow({ text, pending }: { text: string; pending: boolea
   const summary = pending ? lastLine(text) : firstMeaningfulLine(text)
   return (
     <div className="QWLzlG_root" data-variant="think" data-state={pending ? 'running' : 'ok'}>
-      <button type="button" className="QWLzlG_row" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
+      <div
+        className="QWLzlG_row"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => { setOpen(value => !value) }}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(value => !value) } }}
+      >
         <span className="QWLzlG_leading" aria-hidden><ThinkIcon /></span>
         <span className="QWLzlG_title">{pending ? '思考中…' : 'Think'}</span>
-        {!open && (
+        {!open && summary !== '' && (
           <>
             <span className="QWLzlG_separator" aria-hidden />
             <span className="QWLzlG_summary" data-follow-end={pending || undefined}>{summary}</span>
           </>
         )}
-        <span className="QWLzlG_chevron" aria-hidden><Chevron /></span>
-      </button>
+        <span className="QWLzlG_chevron" aria-hidden><Chevron open={open} /></span>
+      </div>
       {open && <div className="QWLzlG_thinkBody">{text}</div>}
     </div>
   )
@@ -793,19 +1043,26 @@ function OfficialToolRow({ tool, failed }: { tool: ToolCallInfo; failed?: boolea
   const state = failed === true ? 'error' : 'ok'
   return (
     <div className="_Xvjua_root" data-variant="others" data-state={state}>
-      <button type="button" className="_Xvjua_row" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
+      <div
+        className="_Xvjua_row"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => { setOpen(value => !value) }}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(value => !value) } }}
+      >
         <span className="_Xvjua_leading" aria-hidden>
-          <span className="chat-tool-dot" data-error={failed || undefined} />
+          {failed === true ? <span className="chat-tool-dot" data-error /> : <BashIcon />}
         </span>
         <span className="_Xvjua_title">{tool.name}</span>
-        {!open && subtitle !== undefined && (
+        {!open && subtitle !== undefined && subtitle !== '' && (
           <>
             <span className="_Xvjua_separator" aria-hidden />
             <span className="_Xvjua_summary" data-error={failed || undefined}>{subtitle}</span>
           </>
         )}
-        <span className="_Xvjua_chevron" aria-hidden><Chevron /></span>
-      </button>
+        <span className="_Xvjua_chevron" aria-hidden><Chevron open={open} /></span>
+      </div>
       {open && tool.arguments !== undefined && (
         <div className="_Xvjua_body" data-error={failed || undefined}>{tool.arguments}</div>
       )}

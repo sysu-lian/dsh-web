@@ -69,14 +69,31 @@ export interface RenderMessage {
   /** Set when the owning turn ended in an error. */
   readonly failed?: boolean
   /**
+   * Turn and step indices from the wire event. Assistant messages use these to
+   * group a multi-step turn and to render per-turn performance statistics.
+   */
+  readonly turn?: number
+  readonly step?: number
+  /**
    * Token usage reported by the final assistant event. cacheReadTokens and
    * cacheWriteTokens are only attached when the wire carried finite values.
+   * uncachedInputTokens is included when the backend separates cache-miss input.
    */
   readonly usage?: {
     inputTokens: number
     outputTokens: number
     cacheReadTokens?: number
     cacheWriteTokens?: number
+    uncachedInputTokens?: number
+  }
+  /**
+   * Assistant timing for this message, used to render the performance stats
+   * line (LLM/tool duration, TTFT, tokens/second).
+   */
+  readonly timing?: {
+    stepStartTime: number | null
+    firstTokenTime: number | null
+    completedTime: number
   }
   /** Context window for the model that produced this message (from request/context). */
   readonly contextWindow?: number
@@ -359,6 +376,7 @@ function applyAssistantMessage(state: FoldState, event: WireEvent): void {
   const finalReasoning = reasoningFromContent(messageData['content'])
   const key = tsKey(turn, step)
   const usage = usageFromData(data)
+  const timing = timingFromData(data)
   const contextWindow = state.contextWindow
 
   // Finalize the matching assistant message (by id, or by turn/step for the
@@ -375,7 +393,10 @@ function applyAssistantMessage(state: FoldState, event: WireEvent): void {
       // reasoning from the final message keeps the streamed reasoning text.
       ...(finalReasoning !== '' ? { reasoning: finalReasoning } : {}),
       ...(usage !== undefined ? { usage } : {}),
+      ...(timing !== undefined ? { timing } : {}),
       ...(usage !== undefined && contextWindow !== undefined ? { contextWindow } : {}),
+      ...(turn !== undefined ? { turn } : {}),
+      ...(step !== undefined ? { step } : {}),
       seq: event.seq,
       time: event.time,
       pending: false,
@@ -392,7 +413,10 @@ function applyAssistantMessage(state: FoldState, event: WireEvent): void {
     text: finalText,
     ...(finalReasoning !== '' ? { reasoning: finalReasoning } : {}),
     ...(usage !== undefined ? { usage } : {}),
+    ...(timing !== undefined ? { timing } : {}),
     ...(usage !== undefined && contextWindow !== undefined ? { contextWindow } : {}),
+    ...(turn !== undefined ? { turn } : {}),
+    ...(step !== undefined ? { step } : {}),
     seq: event.seq,
     time: event.time,
   }
@@ -410,18 +434,38 @@ function applyAssistantMessage(state: FoldState, event: WireEvent): void {
  * wire carries finite `inputTokens` AND `outputTokens`; the cache fields are
  * included only for finite numbers.
  */
-function usageFromData(data: Record<string, unknown>): { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } | undefined {
+function usageFromData(data: Record<string, unknown>): { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; uncachedInputTokens?: number } | undefined {
   const usageData = data['usage']
   if (!isRecord(usageData)) return undefined
   const inputTokens = pickNumber(usageData['inputTokens'])
   const outputTokens = pickNumber(usageData['outputTokens'])
   if (inputTokens === undefined || outputTokens === undefined) return undefined
-  const usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } = { inputTokens, outputTokens }
+  const usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; uncachedInputTokens?: number } = { inputTokens, outputTokens }
   const cacheReadTokens = pickNumber(usageData['cacheReadTokens'])
   const cacheWriteTokens = pickNumber(usageData['cacheWriteTokens'])
+  const uncachedInputTokens = pickNumber(usageData['uncachedInputTokens'])
   if (cacheReadTokens !== undefined) usage.cacheReadTokens = cacheReadTokens
   if (cacheWriteTokens !== undefined) usage.cacheWriteTokens = cacheWriteTokens
+  if (uncachedInputTokens !== undefined) usage.uncachedInputTokens = uncachedInputTokens
   return usage
+}
+
+/**
+ * Extract assistant timing from an event payload. The `timing` object is
+ * optional; when present it drives the LLM/tool duration and TTFT stats.
+ */
+function timingFromData(data: Record<string, unknown>): { stepStartTime: number | null; firstTokenTime: number | null; completedTime: number } | undefined {
+  const timingData = data['timing']
+  if (!isRecord(timingData)) return undefined
+  const completedTime = pickNumber(timingData['completedTime'])
+  if (completedTime === undefined) return undefined
+  const stepStartTime = pickNumber(timingData['stepStartTime'])
+  const firstTokenTime = pickNumber(timingData['firstTokenTime'])
+  return {
+    completedTime,
+    stepStartTime: stepStartTime ?? null,
+    firstTokenTime: firstTokenTime ?? null,
+  }
 }
 
 function applyChunk(state: FoldState, event: WireEvent): void {
@@ -447,8 +491,8 @@ function applyChunk(state: FoldState, event: WireEvent): void {
   const id = target.id
     ?? (key !== undefined ? syntheticId(`assistant,${key}`, event.seq) : syntheticId('assistant', event.seq))
   const created: RenderMessage = target.kind === 'reasoning'
-    ? { id, kind: 'assistant', text: '', reasoning: target.text, seq: event.seq, time: event.time, pending: true }
-    : { id, kind: 'assistant', text: target.text, seq: event.seq, time: event.time, pending: true }
+    ? { id, kind: 'assistant', text: '', reasoning: target.text, seq: event.seq, time: event.time, pending: true, ...(target.turn !== undefined ? { turn: target.turn } : {}), ...(target.step !== undefined ? { step: target.step } : {}) }
+    : { id, kind: 'assistant', text: target.text, seq: event.seq, time: event.time, pending: true, ...(target.turn !== undefined ? { turn: target.turn } : {}), ...(target.step !== undefined ? { step: target.step } : {}) }
   state.messages.push(created)
   state.byId.set(id, created)
   if (key !== undefined) {
