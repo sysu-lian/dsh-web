@@ -90,11 +90,16 @@ async function runAccept(token: string, page: PageSurface): Promise<void> {
   url.searchParams.delete('pair')
   page.replaceState(`${url.pathname}${url.search}${url.hash}`)
   if (ok) {
-    // Phones now stay on the official desktop web UI at "/" (it is responsive
-    // + PWA-installable and renders fine on small screens). The community
-    // /m/ simplified surface is no longer auto-selected; open the intended
-    // workspace the same way desktop does.
-    page.reload()
+    // Phones land on the standalone simplified surface (the full desktop UI
+    // is not built for small screens). Keep the workspace target so the
+    // mobile surface can open the intended workspace instead of losing the
+    // QR context at this navigation boundary.
+    if (isMobileSurface()) {
+      url.pathname = '/m/'
+      page.navigate(`${url.pathname}${url.search}${url.hash}`)
+    } else {
+      page.reload()
+    }
   }
 }
 
