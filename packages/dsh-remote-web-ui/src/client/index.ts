@@ -106,10 +106,49 @@ export const inject = ['slots', 'locale', 'connection', 'settingsScope', 'remote
  * Register the remote-control surface.
  * @param ctx - client root context.
  */
+/**
+ * On small screens, collapse the official app-shell sidebar to its rail by
+ * clicking the native "Collapse sidebar" toggle once. The official web UI has
+ * no width-based responsive breakpoints, so on a phone the sidebar otherwise
+ * eats most of the width. The native toggle stays put for manual expand/collapse.
+ */
+function autoCollapseSidebarOnMobile(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+  if (!window.matchMedia('(max-width: 820px)').matches) return
+  const selector = [
+    '[aria-label="Collapse sidebar"]',
+    '[aria-label="收起侧边栏"]',
+    '[aria-label="Expand sidebar"]',
+    '[aria-label="展开侧边栏"]',
+  ].join(', ')
+  let attempts = 0
+  const tryClick = (): void => {
+    const btn = document.querySelector<HTMLButtonElement>(selector)
+    if (btn) {
+      const label = (btn.getAttribute('aria-label') || '').toLowerCase()
+      // Only collapse while expanded; if already collapsed the label flips to
+      // "Expand", so we leave it alone.
+      if (label.includes('collapse') || label.includes('收起')) btn.click()
+      return
+    }
+    if (attempts++ < 60) window.setTimeout(tryClick, 150)
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => window.setTimeout(tryClick, 400))
+  } else {
+    window.setTimeout(tryClick, 400)
+  }
+}
+
 export function apply(ctx: ClientContext): void {
   // Anonymous install heartbeat (docs/telemetry.md): one beat per browser per
   // UTC day, package name only, silent failure.
   reportDailyHeartbeat([{ name: '@linxin666/dsh-remote-web-ui' }])
+
+  // On phones, collapse the official sidebar to its rail by default (the
+  // official UI has no responsive breakpoint for it). Runs on every page the
+  // plugin client loads, including the official "/".
+  autoCollapseSidebarOnMobile()
 
   ctx.effect(() => {
     try {
