@@ -415,11 +415,27 @@ body {
 }
 
 .chat-msg-time {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 4px;
   color: var(--m-text-tertiary);
   font-size: 10.5px;
   line-height: 1.2;
+}
+
+.chat-msg-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chat-msg-footer .chat-msg-time {
+  margin-top: 0;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .chat-msg-toggle {
@@ -433,6 +449,41 @@ body {
   color: var(--m-accent);
   font-size: 13px;
   cursor: pointer;
+}
+
+/* ── assistant message action toolbar (copy / thumbs up / thumbs down) ── */
+
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.chat-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m-text-tertiary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.chat-action-btn:active {
+  background: var(--m-accent-soft);
+  color: var(--m-accent);
+}
+
+.chat-action-btn-active,
+.chat-action-btn-active:active {
+  color: var(--m-accent);
+  background: var(--m-accent-soft);
 }
 
 /* Assistant markdown content (GFM subset; renderer in markdown.ts). */
@@ -573,10 +624,19 @@ body {
 
 .chat-disclosure-caret {
   flex: none;
+  display: inline-flex;
+  align-items: center;
   color: var(--m-text-tertiary);
   font-size: 14px;
   line-height: 1;
   transition: transform 0.15s ease;
+}
+
+.chat-disclosure-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--m-accent);
 }
 
 .chat-disclosure-open .chat-disclosure-caret {
@@ -590,6 +650,31 @@ body {
 
 .chat-reasoning[data-pending] .chat-disclosure-label {
   color: var(--m-accent);
+}
+
+.chat-reasoning {
+  display: inline-flex;
+  max-width: 100%;
+  margin-bottom: 8px;
+  border: 1px solid var(--m-border);
+  border-radius: 999px;
+  background: var(--m-bg);
+  overflow: hidden;
+}
+
+.chat-reasoning .chat-disclosure-head {
+  gap: 5px;
+  padding: 5px 11px;
+  min-height: 30px;
+}
+
+.chat-reasoning .chat-disclosure-label {
+  font-weight: 500;
+  color: var(--m-text-secondary);
+}
+
+.chat-reasoning .chat-disclosure-summary {
+  margin-left: 2px;
 }
 
 .chat-disclosure-summary {

@@ -498,10 +498,11 @@ export function ChatView({ session, mux, onBack }: ChatViewProps) {
             {loading ? '加载中…' : '加载更早的消息'}
           </button>
         )}
-        {messages.map(message => (
+        {messages.map((message, index) => (
           <MessageRow
             key={message.id}
             message={message}
+            prevTime={index > 0 ? messages[index - 1].time : undefined}
             showToolCalls={showToolCalls}
             showSystemMessages={showSystemMessages}
           />
@@ -614,13 +615,67 @@ export function ChatView({ session, mux, onBack }: ChatViewProps) {
 
 /* ── message rows ─────────────────────────────────────────────────────── */
 
+/** Icon-only action bar below each assistant message (copy / thumbs up / thumbs down). */
+function MessageActions({ text }: { text: string }) {
+  const [feedback, setFeedback] = useState<'up' | 'down' | undefined>(undefined)
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(() => {
+    void copyText(text).then((ok) => {
+      setCopied(ok)
+      setTimeout(() => { setCopied(false) }, 1500)
+    })
+  }, [text])
+  return (
+    <div className="chat-actions">
+      <button
+        type="button"
+        className={copied ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
+        aria-label={copied ? '已复制' : '复制'}
+        onClick={handleCopy}
+      >
+        {copied ? (
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path d="M2.5 8.5 6 12l7.5-7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <rect x="4" y="4" width="9" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M11 2H3c-.6 0-1 .4-1 1v8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        )}
+      </button>
+      <button
+        type="button"
+        className={feedback === 'up' ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
+        aria-label="有用"
+        onClick={() => { setFeedback(value => value === 'up' ? undefined : 'up') }}
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+          <path d="M4.5 7h-2c-.6 0-1 .4-1 1v4c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V8c0-.6-.4-1-1-1Zm9-1.5-1.5-3.5c-.2-.4-.6-.7-1.1-.7H7.5c-.6 0-1.1.5-1.1 1.1v5.6c0 .6.5 1.1 1.1 1.1h4.4c.5 0 .9-.3 1.1-.7l1.5-3.5c.3-.7-.1-1.6-.9-1.6h-.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className={feedback === 'down' ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
+        aria-label="无用"
+        onClick={() => { setFeedback(value => value === 'down' ? undefined : 'down') }}
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+          <path d="M4.5 9h-2c-.6 0-1-.4-1-1V4c0-.6.4-1 1-1h2c.6 0 1 .4 1 1v4c0 .6-.4 1-1 1Zm9 1.5-1.5 3.5c-.2.4-.6.7-1.1.7H7.5c-.6 0-1.1-.5-1.1-1.1V8c0-.6.5-1.1 1.1-1.1h4.4c.5 0 .9.3 1.1.7l1.5 3.5c.3.7-.1 1.6-.9 1.6h-.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
 /**
  * One rendered message row (user bubble or assistant bubble with folds).
  * Memoized: live streaming updates exactly one message object per frame, so
  * unchanged rows skip re-rendering their markdown/sub-components.
  */
-const MessageRow = memo(function MessageRow({ message, showToolCalls, showSystemMessages }: {
+const MessageRow = memo(function MessageRow({ message, prevTime, showToolCalls, showSystemMessages }: {
   message: RenderMessage
+  prevTime?: number
   showToolCalls: boolean
   showSystemMessages: boolean
 }) {
@@ -632,27 +687,44 @@ const MessageRow = memo(function MessageRow({ message, showToolCalls, showSystem
     && !showSystemMessages) {
     return null
   }
-  const hasReasoning = message.kind === 'assistant' && message.reasoning !== undefined && message.reasoning !== ''
-  const hasTools = showToolCalls && message.kind === 'assistant' && message.tools !== undefined && message.tools.length > 0
+  const isAssistant = message.kind === 'assistant'
+  const hasReasoning = isAssistant && message.reasoning !== undefined && message.reasoning !== ''
+  const hasTools = showToolCalls && isAssistant && message.tools !== undefined && message.tools.length > 0
   const hasText = message.text !== ''
   const hasFailTag = message.failed === true
+  const duration = isAssistant && message.pending !== true && prevTime !== undefined && message.time > prevTime
+    ? Math.max(1, Math.round((message.time - prevTime) / 1000))
+    : undefined
 
   if (!hasReasoning && !hasTools && !hasText && !hasFailTag) {
     return null
   }
   return (
     <div className={`chat-msg chat-msg-${message.kind}${message.pending === true ? ' chat-msg-pending' : ''}${message.failed === true ? ' chat-msg-failed' : ''}`}>
-      {message.kind === 'assistant' && message.reasoning !== undefined && message.reasoning !== '' && (
+      {isAssistant && message.reasoning !== undefined && message.reasoning !== '' && (
         <ReasoningDisclosure text={message.reasoning} pending={message.pending === true} />
       )}
-      {showToolCalls && message.kind === 'assistant' && message.tools !== undefined && message.tools.length > 0 && (
+      {showToolCalls && isAssistant && message.tools !== undefined && message.tools.length > 0 && (
         <ToolDisclosure tools={message.tools} />
       )}
-      {message.kind === 'assistant'
+      {isAssistant
         ? <MarkdownText text={message.text} pending={message.pending === true} />
         : <CollapsibleText text={message.text} />}
-      {message.failed === true && <span className="chat-msg-failtag">请求失败，点此重试 ↻</span>}
-      <span className="chat-msg-time">{formatTime(message.time)}</span>
+      {hasFailTag && <span className="chat-msg-failtag">请求失败，点此重试 ↻</span>}
+      {isAssistant && !message.pending && hasText ? (
+        <div className="chat-msg-footer">
+          <MessageActions text={message.text} />
+          <span className="chat-msg-time">
+            {formatTime(message.time)}
+            {duration !== undefined && ` · 用时 ${duration} 秒`}
+          </span>
+        </div>
+      ) : (
+        <span className="chat-msg-time">
+          {formatTime(message.time)}
+          {duration !== undefined && ` · 用时 ${duration} 秒`}
+        </span>
+      )}
     </div>
   )
 })
@@ -669,8 +741,17 @@ function ReasoningDisclosure({ text, pending }: { text: string; pending: boolean
         aria-expanded={open}
         onClick={() => { setOpen(value => !value) }}
       >
-        <span className="chat-disclosure-caret" aria-hidden>›</span>
-        <span className="chat-disclosure-label">{pending ? '思考中…' : '深度思考'}</span>
+        <span className="chat-disclosure-caret" aria-hidden>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+            <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <span className="chat-disclosure-icon" aria-hidden>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+            <path d="M8 1.5 9.5 5l3.5.5-2.5 2.5 1 3.5L8 10.5 4.5 11.5l1-3.5L3 5.5l3.5-.5L8 1.5Z" fill="currentColor" />
+          </svg>
+        </span>
+        <span className="chat-disclosure-label">{pending ? '思考中…' : 'Think'}</span>
         {!open && <span className="chat-disclosure-summary">{summary}</span>}
       </button>
       {open && <div className="chat-disclosure-body">{text}</div>}
