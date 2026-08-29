@@ -129,7 +129,7 @@ describe('ChatView message folds', () => {
     // The folded turn renders: user bubble, assistant text, disclosures.
     expect(await screen.findByText('改一下代码')).toBeTruthy()
     expect(await screen.findByText('已完成修改')).toBeTruthy()
-    const head = await screen.findByRole('button', { name: /深度思考/ })
+    const head = await screen.findByRole('button', { name: /Think/ })
     expect(head.getAttribute('aria-expanded')).toBe('false')
     // Only the one-line summary shows while collapsed; the body stays hidden.
     expect(await screen.findByText('先看结构')).toBeTruthy()
@@ -144,7 +144,7 @@ describe('ChatView message folds', () => {
     loadHistoryMock.mockResolvedValue(historyPage(turnEvents()))
     render(<ChatView session={session} onBack={() => {}} />)
 
-    const head = await screen.findByRole('button', { name: /工具/ })
+    const head = await screen.findByRole('button', { name: /bash/ })
     expect(head.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByText('{"cmd":"ls"}')).toBeNull()
 
@@ -241,7 +241,7 @@ describe('ChatView initial-load race', () => {
 
     expect(await screen.findByText('实时新消息')).toBeTruthy()
     // The history turn's tool disclosure plus the live one both render.
-    expect((await screen.findAllByRole('button', { name: /工具/ })).length).toBe(2)
+    expect((await screen.findAllByRole('button', { name: /bash/ })).length).toBe(2)
   })
 
   it('caps the tail-load live buffer and re-pulls the history tail after an overflow', async () => {
@@ -607,7 +607,7 @@ describe('ChatView display toggles and context usage', () => {
     render(<ChatView session={session} onBack={() => {}} />)
 
     // Tool disclosure visible by default.
-    expect(await screen.findByRole('button', { name: /工具/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /bash/ })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /显示/ }))
     const toolSwitch = await screen.findByRole('switch', { name: '工具调用' })
@@ -615,7 +615,7 @@ describe('ChatView display toggles and context usage', () => {
     fireEvent.click(toolSwitch)
 
     // The disclosure is gone while reasoning/text remain.
-    expect(screen.queryByRole('button', { name: /工具/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /bash/ })).toBeNull()
     expect(screen.getByText('完成')).toBeTruthy()
   })
 
@@ -743,7 +743,7 @@ describe('ChatView message visibility and long text folding (#1065)', () => {
 
     expect(await screen.findByText('查询文件')).toBeTruthy()
     // By default showToolCalls is true, tool disclosure is visible
-    expect(await screen.findByRole('button', { name: /工具/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /read_file/ })).toBeTruthy()
 
     // Turn off tool-calls toggle
     fireEvent.click(screen.getByRole('button', { name: /显示/ }))
@@ -751,7 +751,7 @@ describe('ChatView message visibility and long text folding (#1065)', () => {
     fireEvent.click(toolSwitch)
 
     // The tool disclosure is gone, and the entire assistant message bubble is not rendered (no air bubble)
-    expect(screen.queryByRole('button', { name: /工具/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /read_file/ })).toBeNull()
     const msgElements = container.querySelectorAll('.chat-msg')
     expect(msgElements.length).toBe(1)
     expect(msgElements[0]?.classList.contains('chat-msg-user')).toBe(true)
@@ -770,7 +770,7 @@ describe('ChatView message visibility and long text folding (#1065)', () => {
     render(<ChatView session={session} onBack={() => {}} />)
 
     expect(await screen.findByText('测试失败')).toBeTruthy()
-    expect(await screen.findByText('本次回复失败')).toBeTruthy()
+    expect(await screen.findByText('请求失败，点此重试 ↻')).toBeTruthy()
   })
 
   it('collapses terminal assistant text exceeding LONG_TEXT_LIMIT and toggles open/close', async () => {
