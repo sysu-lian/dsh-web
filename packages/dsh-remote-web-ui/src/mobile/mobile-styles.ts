@@ -375,18 +375,15 @@ body {
 
 .chat-msg-user {
   align-self: flex-end;
-  background: linear-gradient(135deg, var(--m-accent) 0%, #4c8dff 100%);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 1px 3px rgba(47, 111, 237, 0.28);
+  background: var(--m-accent-soft);
+  color: var(--m-text);
+  border-radius: var(--m-radius);
 }
 
 .chat-msg-assistant {
   align-self: flex-start;
-  background: var(--m-bg-raised);
-  border: 1px solid var(--m-border);
-  border-bottom-left-radius: 4px;
-  box-shadow: var(--m-shadow);
+  background: transparent;
+  padding: 6px 4px;
 }
 
 .chat-msg-pending .chat-msg-text::after {

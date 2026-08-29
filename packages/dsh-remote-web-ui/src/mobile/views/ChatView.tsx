@@ -615,8 +615,8 @@ export function ChatView({ session, mux, onBack }: ChatViewProps) {
 
 /* ── message rows ─────────────────────────────────────────────────────── */
 
-/** Single copy button for user messages (mirrors the reference screenshot). */
-function UserMessageActions({ text }: { text: string }) {
+/** Copy-to-clipboard button (used for both assistant and user messages). */
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = useCallback(() => {
     void copyText(text).then((ok) => {
@@ -632,69 +632,16 @@ function UserMessageActions({ text }: { text: string }) {
       onClick={handleCopy}
     >
       {copied ? (
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
           <path d="M2.5 8.5 6 12l7.5-7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ) : (
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
           <rect x="4" y="4" width="9" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <path d="M11 2H3c-.6 0-1 .4-1 1v8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       )}
     </button>
-  )
-}
-
-/** Icon-only action bar below each assistant message (copy / thumbs up / thumbs down). */
-function MessageActions({ text }: { text: string }) {
-  const [feedback, setFeedback] = useState<'up' | 'down' | undefined>(undefined)
-  const [copied, setCopied] = useState(false)
-  const handleCopy = useCallback(() => {
-    void copyText(text).then((ok) => {
-      setCopied(ok)
-      setTimeout(() => { setCopied(false) }, 1500)
-    })
-  }, [text])
-  return (
-    <div className="chat-actions">
-      <button
-        type="button"
-        className={copied ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
-        aria-label={copied ? '已复制' : '复制'}
-        onClick={handleCopy}
-      >
-        {copied ? (
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-            <path d="M2.5 8.5 6 12l7.5-7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-            <rect x="4" y="4" width="9" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M11 2H3c-.6 0-1 .4-1 1v8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        )}
-      </button>
-      <button
-        type="button"
-        className={feedback === 'up' ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
-        aria-label="有用"
-        onClick={() => { setFeedback(value => value === 'up' ? undefined : 'up') }}
-      >
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-          <path d="M4.5 7h-2c-.6 0-1 .4-1 1v4c0 .6.4 1 1 1h2c.6 0 1-.4 1-1V8c0-.6-.4-1-1-1Zm9-1.5-1.5-3.5c-.2-.4-.6-.7-1.1-.7H7.5c-.6 0-1.1.5-1.1 1.1v5.6c0 .6.5 1.1 1.1 1.1h4.4c.5 0 .9-.3 1.1-.7l1.5-3.5c.3-.7-.1-1.6-.9-1.6h-.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className={feedback === 'down' ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
-        aria-label="无用"
-        onClick={() => { setFeedback(value => value === 'down' ? undefined : 'down') }}
-      >
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-          <path d="M4.5 9h-2c-.6 0-1-.4-1-1V4c0-.6.4-1 1-1h2c.6 0 1 .4 1 1v4c0 .6-.4 1-1 1Zm9 1.5-1.5 3.5c-.2.4-.6.7-1.1.7H7.5c-.6 0-1.1-.5-1.1-1.1V8c0-.6.5-1.1 1.1-1.1h4.4c.5 0 .9.3 1.1.7l1.5 3.5c.3.7-.1 1.6-.9 1.6h-.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        </svg>
-      </button>
-    </div>
   )
 }
 
@@ -743,7 +690,7 @@ const MessageRow = memo(function MessageRow({ message, prevTime, showToolCalls, 
       {hasFailTag && <span className="chat-msg-failtag">请求失败，点此重试 ↻</span>}
       {isAssistant && !message.pending && hasText ? (
         <div className="chat-msg-footer">
-          <MessageActions text={message.text} />
+          <CopyButton text={message.text} />
           <span className="chat-msg-time">
             {formatTime(message.time)}
             {duration !== undefined && ` · 用时 ${duration} 秒`}
@@ -754,7 +701,7 @@ const MessageRow = memo(function MessageRow({ message, prevTime, showToolCalls, 
           <span className="chat-msg-time">
             {formatTime(message.time)}
           </span>
-          {!message.pending && hasText && <UserMessageActions text={message.text} />}
+          {!message.pending && hasText && <CopyButton text={message.text} />}
         </div>
       )}
     </div>
