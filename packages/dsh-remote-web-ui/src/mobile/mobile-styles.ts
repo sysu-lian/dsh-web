@@ -672,9 +672,9 @@ body {
   gap: 5px;
   padding: 5px 11px;
   min-height: 30px;
-  border: 1px solid var(--m-border);
-  border-radius: 999px;
-  background: var(--m-bg);
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .chat-reasoning .chat-disclosure-label {
@@ -687,12 +687,12 @@ body {
 }
 
 .chat-reasoning .chat-disclosure-body {
-  margin-top: 6px;
-  padding: 9px 12px;
-  border: 1px solid var(--m-border);
-  border-radius: 12px;
-  background: var(--m-bg);
-  color: var(--m-text-secondary);
+  margin-top: 2px;
+  padding: 4px 2px 4px 22px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--m-text-tertiary);
 }
 
 .chat-disclosure-summary {
