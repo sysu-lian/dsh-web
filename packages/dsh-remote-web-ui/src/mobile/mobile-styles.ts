@@ -438,6 +438,14 @@ body {
   white-space: nowrap;
 }
 
+.chat-msg-footer-user {
+  justify-content: flex-end;
+}
+
+.chat-msg-footer-user .chat-msg-time {
+  margin-left: 0;
+}
+
 .chat-msg-toggle {
   display: inline-flex;
   align-items: center;
@@ -653,19 +661,23 @@ body {
 }
 
 .chat-reasoning {
-  display: inline-flex;
+  display: inline-block;
   max-width: 100%;
-  margin-bottom: 8px;
-  border: 1px solid var(--m-border);
-  border-radius: 999px;
-  background: var(--m-bg);
-  overflow: hidden;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .chat-reasoning .chat-disclosure-head {
+  display: inline-flex;
   gap: 5px;
   padding: 5px 11px;
   min-height: 30px;
+  border: 1px solid var(--m-border);
+  border-radius: 999px;
+  background: var(--m-bg);
 }
 
 .chat-reasoning .chat-disclosure-label {
@@ -675,6 +687,15 @@ body {
 
 .chat-reasoning .chat-disclosure-summary {
   margin-left: 2px;
+}
+
+.chat-reasoning .chat-disclosure-body {
+  margin-top: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--m-border);
+  border-radius: 12px;
+  background: var(--m-bg);
+  color: var(--m-text-secondary);
 }
 
 .chat-disclosure-summary {

@@ -615,6 +615,36 @@ export function ChatView({ session, mux, onBack }: ChatViewProps) {
 
 /* ── message rows ─────────────────────────────────────────────────────── */
 
+/** Single copy button for user messages (mirrors the reference screenshot). */
+function UserMessageActions({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(() => {
+    void copyText(text).then((ok) => {
+      setCopied(ok)
+      setTimeout(() => { setCopied(false) }, 1500)
+    })
+  }, [text])
+  return (
+    <button
+      type="button"
+      className={copied ? 'chat-action-btn chat-action-btn-active' : 'chat-action-btn'}
+      aria-label={copied ? '已复制' : '复制'}
+      onClick={handleCopy}
+    >
+      {copied ? (
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+          <path d="M2.5 8.5 6 12l7.5-7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false">
+          <rect x="4" y="4" width="9" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M11 2H3c-.6 0-1 .4-1 1v8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 /** Icon-only action bar below each assistant message (copy / thumbs up / thumbs down). */
 function MessageActions({ text }: { text: string }) {
   const [feedback, setFeedback] = useState<'up' | 'down' | undefined>(undefined)
@@ -720,10 +750,12 @@ const MessageRow = memo(function MessageRow({ message, prevTime, showToolCalls, 
           </span>
         </div>
       ) : (
-        <span className="chat-msg-time">
-          {formatTime(message.time)}
-          {duration !== undefined && ` · 用时 ${duration} 秒`}
-        </span>
+        <div className="chat-msg-footer chat-msg-footer-user">
+          <span className="chat-msg-time">
+            {formatTime(message.time)}
+          </span>
+          {!message.pending && hasText && <UserMessageActions text={message.text} />}
+        </div>
       )}
     </div>
   )
@@ -744,11 +776,6 @@ function ReasoningDisclosure({ text, pending }: { text: string; pending: boolean
         <span className="chat-disclosure-caret" aria-hidden>
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
             <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-        <span className="chat-disclosure-icon" aria-hidden>
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-            <path d="M8 1.5 9.5 5l3.5.5-2.5 2.5 1 3.5L8 10.5 4.5 11.5l1-3.5L3 5.5l3.5-.5L8 1.5Z" fill="currentColor" />
           </svg>
         </span>
         <span className="chat-disclosure-label">{pending ? '思考中…' : 'Think'}</span>
