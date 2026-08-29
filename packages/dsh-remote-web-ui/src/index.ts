@@ -23,6 +23,7 @@ import { dshHome } from './dsh-home.ts'
 import { isPairedDeviceRequest, makeGateListener } from './gate.ts'
 import { RemoteWebUiPairing } from './pairing-access.ts'
 import { isTrustedApiRequest, makeRoutes } from './routes.ts'
+import { makeMobileRoutes } from './mobile-routes.ts'
 import { makeMobileApiRoutes } from './mobile-api.ts'
 import { PendingTracker } from './mobile-pending.ts'
 import { makePairedModelCatalogRoutes } from './paired-model-catalog.ts'
@@ -291,12 +292,8 @@ function applyImpl(ctx: Context, config?: Config): void {
   // (now vetoing every non-loopback request) instead of opening the fence.
   let disposeRoutes: (() => void) | undefined
   let disposeSweep: (() => void) | undefined
-  // The phone's data channel: pairing routes + the /m/api proxy (which
-  // needs the host ApiProxy service; the plugin injects it). The /m page
-  // itself is intentionally NOT registered anymore: the unclaimed /m/ path
-  // falls through to the host's frontend-static fallback seat, which serves
-  // the official dsh-web-frontend dist (with all client plugins injected),
-  // so phones get the official conversation UI verbatim.
+  // The phone's data channel: pairing routes + the /m page + the /m/api
+  // proxy (which needs the host ApiProxy service; the plugin injects it).
   const apiProxy = ctx.get('apiProxy')
   if (apiProxy === undefined) {
     console.warn('remote-web-ui: apiProxy service unavailable — the mobile data channel is disabled')
@@ -377,6 +374,7 @@ function applyImpl(ctx: Context, config?: Config): void {
   })
   const routes = [
     ...makeRoutes({ service, lanAddresses, requirePairingForLan: () => resolve().requirePairingForLan }),
+    ...makeMobileRoutes(),
     ...(apiProxy !== undefined
       ? makeMobileApiRoutes({
           service,
